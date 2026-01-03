@@ -177,6 +177,8 @@ function processEvent(event) {
       color: machine.color,
       cwd: event.cwd || BASE_PATH,
       tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+      lastSeenTokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+      contextUsage: { current: 0, max: 200000, percent: 0 },
       x: Math.random() * 600 + 100,
       y: Math.random() * 400 + 100
     });
@@ -587,6 +589,8 @@ wss.on('connection', (ws) => {
       machine: s.machine,
       color: s.color,
       tokens: s.tokens,
+      contextUsage: s.contextUsage,
+      cwd: s.cwd,
       x: s.x,
       y: s.y,
       files: Array.from(s.files),
