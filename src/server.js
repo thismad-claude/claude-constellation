@@ -240,8 +240,8 @@ function processEvent(event) {
 
   const session = state.sessions.get(sessionId);
 
-  // Update cwd if provided
-  if (event.cwd && !session.cwd) {
+  // Update cwd if provided (always update, hook sends the real cwd)
+  if (event.cwd) {
     session.cwd = event.cwd;
   }
 
