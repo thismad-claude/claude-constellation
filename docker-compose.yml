@@ -1,0 +1,10 @@
+services:
+  constellation:
+    build: .
+    container_name: claude-constellation
+    network_mode: host
+    volumes:
+      - ~/.claude:/.claude:ro
+    environment:
+      - HOME=/app
+    restart: unless-stopped

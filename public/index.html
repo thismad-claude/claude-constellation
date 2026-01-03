@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Constellation</title>
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three-spritetext@1.8.2/dist/three-spritetext.min.js"></script>
+  <script src="https://unpkg.com/3d-force-graph@1.73.0"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      overflow: hidden;
+      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    #graph {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 15px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    #overlay > * {
+      pointer-events: auto;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      text-shadow: 0 0 20px rgba(255, 105, 180, 0.5);
+    }
+
+    .stats {
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      color: #888;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .stat-dot.brain { background: #ff69b4; box-shadow: 0 0 10px #ff69b4; }
+    .stat-dot.file { background: #4a9eff; }
+    .stat-dot.terminal { background: #4ade80; }
+
+    #connection-status {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.1);
+    }
+
+    #connection-status.connected { color: #4ade80; }
+    #connection-status.disconnected { color: #f87171; }
+
+    .token-stat, .cache-stat {
+      background: rgba(255, 200, 0, 0.1);
+      padding: 4px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 200, 0, 0.3);
+    }
+
+    .token-stat.pulse {
+      animation: tokenPulse 0.5s ease-out;
+    }
+
+    @keyframes tokenPulse {
+      0% { transform: scale(1); background: rgba(255, 200, 0, 0.1); }
+      50% { transform: scale(1.1); background: rgba(255, 200, 0, 0.4); }
+      100% { transform: scale(1); background: rgba(255, 200, 0, 0.1); }
+    }
+
+    .context-stat {
+      background: rgba(74, 222, 128, 0.15);
+      border: 1px solid rgba(74, 222, 128, 0.4);
+      color: #4ade80;
+    }
+
+    .context-stat .context-icon,
+    .context-stat .token-label {
+      color: #4ade80;
+    }
+
+    .context-stat #context-usage {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .context-stat.warning {
+      background: rgba(251, 191, 36, 0.2);
+      border: 1px solid rgba(251, 191, 36, 0.5);
+      color: #fbbf24;
+    }
+
+    .context-stat.warning .context-icon,
+    .context-stat.warning .token-label,
+    .context-stat.warning #context-usage {
+      color: #fbbf24;
+    }
+
+    .context-stat.danger {
+      background: rgba(255, 107, 107, 0.25);
+      border: 1px solid rgba(255, 107, 107, 0.6);
+      color: #ff6b6b;
+      animation: contextPulse 1s ease-in-out infinite;
+    }
+
+    .context-stat.danger .context-icon,
+    .context-stat.danger .token-label,
+    .context-stat.danger #context-usage {
+      color: #ff6b6b;
+    }
+
+    @keyframes contextPulse {
+      0%, 100% { background: rgba(255, 107, 107, 0.25); }
+      50% { background: rgba(255, 107, 107, 0.5); }
+    }
+
+    .token-icon, .cache-icon {
+      font-size: 12px;
+      margin-right: 4px;
+    }
+
+    .token-label {
+      font-size: 10px;
+      opacity: 0.7;
+      margin-left: 2px;
+    }
+
+    #tooltip {
+      position: fixed;
+      padding: 8px 12px;
+      background: rgba(20, 20, 30, 0.95);
+      border: 1px solid rgba(255, 105, 180, 0.3);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      max-width: 300px;
+      backdrop-filter: blur(10px);
+    }
+
+    #tooltip .label {
+      color: #ff69b4;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    #tooltip .detail {
+      color: #888;
+      font-size: 11px;
+    }
+
+    #machines {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+    }
+
+    .machine-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(20, 20, 30, 0.8);
+      border-radius: 20px;
+      font-size: 12px;
+      color: #fff;
+      backdrop-filter: blur(10px);
+    }
+
+    .machine-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+
+    #legend {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 100;
+      background: rgba(20, 20, 30, 0.8);
+      padding: 12px 16px;
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+    }
+
+    .legend-title {
+      font-size: 11px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .legend-square {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div id="graph"></div>
+
+  <div id="overlay">
+    <div class="title">Claude Constellation</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-dot brain"></div> Brains: <span id="brain-count">0</span></div>
+      <div class="stat"><div class="stat-dot file"></div> Files: <span id="file-count">0</span></div>
+      <div class="stat"><div class="stat-dot terminal"></div> Terminals: <span id="terminal-count">0</span></div>
+      <div class="stat token-stat">
+        <span class="token-icon">⚡</span>
+        <span id="token-count">0</span>
+        <span class="token-label">tokens</span>
+      </div>
+    </div>
+    <div id="connection-status" class="disconnected">Disconnected</div>
+  </div>
+
+  <div id="tooltip">
+    <div class="label"></div>
+    <div class="detail"></div>
+  </div>
+
+  <div id="machines"></div>
+
+  <div id="legend">
+    <div class="legend-title">Actions</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #4a9eff;"></div> Read</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ff6b6b;"></div> Write</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #ffd93d;"></div> Edit</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #a78bfa;"></div> Glob</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #2dd4bf;"></div> Grep</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #f472b6;"></div> WebFetch</div>
+    <div class="legend-item"><div class="legend-square" style="background: #4ade80;"></div> Terminal</div>
+    <div class="legend-item"><div class="legend-dot" style="background: #666666;"></div> Folder</div>
+  </div>
+
+  <script>
+    // State
+    const state = {
+      sessions: new Map(),
+      files: new Map(),
+      folders: new Map(),  // folderPath -> { name, sessions, children, depth }
+      terminals: new Map(),
+      machines: new Map()
+    };
+
+    // Global token tracking
+    let globalTokens = {
+      totalInput: 0,
+      totalOutput: 0,
+      totalCacheRead: 0,
+      totalCacheCreation: 0
+    };
+
+    // Token burst particles
+    const tokenBursts = [];
+
+    // Format large numbers
+    function formatTokens(n) {
+      if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+      return n.toString();
+    }
+
+    // Update token display
+    function updateTokenDisplay() {
+      const total = globalTokens.totalInput + globalTokens.totalOutput;
+      document.getElementById('token-count').textContent = formatTokens(total);
+    }
+
+    // Create token burst effect from a position
+    function createTokenBurst(position, color, count) {
+      if (!position) return;
+
+      for (let i = 0; i < count; i++) {
+        const particle = new THREE.Mesh(
+          new THREE.SphereGeometry(0.5, 8, 8),
+          new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+        );
+        particle.position.copy(position);
+
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 2,
+          (Math.random() - 0.5) * 2,
+          (Math.random() - 0.5) * 2
+        );
+
+        tokenBursts.push({
+          mesh: particle,
+          velocity,
+          life: 1.0,
+          decay: 0.02 + Math.random() * 0.02
+        });
+
+        Graph.scene().add(particle);
+      }
+    }
+
+    // Graph data
+    const graphData = {
+      nodes: [],
+      links: []
+    };
+
+    // Track animated brain nodes
+    const brainNodes = new Map();
+
+    // Initialize 3D Force Graph
+    const Graph = ForceGraph3D()
+      (document.getElementById('graph'))
+      .backgroundColor('#050510')
+      .nodeThreeObject(node => {
+        const group = new THREE.Group();
+
+        if (node.type === 'session') {
+          // Calculate brain size based on tokens (scale 8-15 based on usage)
+          const tokens = node.tokens || { input: 0, output: 0, cacheRead: 0 };
+          const totalTokens = (tokens.input || 0) + (tokens.output || 0);
+          const sizeScale = Math.min(1 + Math.log10(Math.max(totalTokens, 1)) * 0.15, 1.8);
+          const baseSize = 8 * sizeScale;
+
+          // Brain node - glowing sphere with pulsing animation
+          const geometry = new THREE.SphereGeometry(baseSize, 32, 32);
+          const material = new THREE.MeshBasicMaterial({
+            color: node.color || '#ff69b4',
+            transparent: true,
+            opacity: 0.9
+          });
+          const sphere = new THREE.Mesh(geometry, material);
+          group.add(sphere);
+
+          // Add inner glow
+          const glowGeometry = new THREE.SphereGeometry(baseSize * 1.5, 32, 32);
+          const glowMaterial = new THREE.MeshBasicMaterial({
+            color: node.color || '#ff69b4',
+            transparent: true,
+            opacity: 0.3
+          });
+          const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+          group.add(glow);
+
+          // Add pulsing outer ring for active state
+          const ringGeometry = new THREE.RingGeometry(baseSize * 1.75, baseSize * 2, 32);
+          const ringMaterial = new THREE.MeshBasicMaterial({
+            color: node.color || '#ff69b4',
+            transparent: true,
+            opacity: node.active ? 0.6 : 0,
+            side: THREE.DoubleSide
+          });
+          const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+          group.add(ring);
+
+          // Add thinking glow
+          const thinkGeometry = new THREE.SphereGeometry(baseSize * 2.5, 32, 32);
+          const thinkMaterial = new THREE.MeshBasicMaterial({
+            color: '#9333ea',
+            transparent: true,
+            opacity: node.thinking ? 0.3 : 0
+          });
+          const thinkGlow = new THREE.Mesh(thinkGeometry, thinkMaterial);
+          group.add(thinkGlow);
+
+          // Add waiting glow (orange) for permission requests
+          const waitGeometry = new THREE.SphereGeometry(baseSize * 2.2, 32, 32);
+          const waitMaterial = new THREE.MeshBasicMaterial({
+            color: '#f97316',
+            transparent: true,
+            opacity: node.waiting ? 0.4 : 0
+          });
+          const waitGlow = new THREE.Mesh(waitGeometry, waitMaterial);
+          group.add(waitGlow);
+
+          // Add waiting ring (orange, dashed look via segments)
+          const waitRingGeometry = new THREE.RingGeometry(baseSize * 2.2, baseSize * 2.5, 8);
+          const waitRingMaterial = new THREE.MeshBasicMaterial({
+            color: '#f97316',
+            transparent: true,
+            opacity: node.waiting ? 0.8 : 0,
+            side: THREE.DoubleSide
+          });
+          const waitRing = new THREE.Mesh(waitRingGeometry, waitRingMaterial);
+          group.add(waitRing);
+
+          // Add hostname label (positioned above)
+          const label = new SpriteText(node.machine || 'brain', 6, node.color || '#ff69b4');
+          label.position.y = baseSize * 3.5;
+          label.material.depthTest = false;
+          group.add(label);
+
+          // Add token | context label below hostname (same color as hostname)
+          const tokenText = formatTokens((tokens.input || 0) + (tokens.output || 0));
+          const contextPct = node.contextUsage?.percent || 0;
+          const tokenLabel = new SpriteText(`${tokenText} tok | ${contextPct}% ctx`, 4, node.color || '#ff69b4');
+          tokenLabel.position.y = baseSize * 3.5 - 8;
+          tokenLabel.material.depthTest = false;
+          group.add(tokenLabel);
+
+          // Store reference for animation
+          brainNodes.set(node.id, {
+            group, sphere, glow, ring, thinkGlow, waitGlow, waitRing, label, tokenLabel,
+            material, glowMaterial, ringMaterial, thinkMaterial, waitMaterial, waitRingMaterial,
+            active: node.active, thinking: node.thinking, waiting: node.waiting,
+            color: node.color, baseSize
+          });
+
+          return group;
+        } else if (node.type === 'file') {
+          // File node - small colored sphere
+          const geometry = new THREE.SphereGeometry(4, 16, 16);
+          const material = new THREE.MeshBasicMaterial({
+            color: node.actionColor || '#4a9eff',
+            transparent: true,
+            opacity: 0.8
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          group.add(mesh);
+
+          // Add label
+          const label = new SpriteText(node.name || 'file', 4, '#ffffff');
+          label.position.y = 10;
+          label.material.depthTest = false;
+          group.add(label);
+
+          return group;
+        } else if (node.type === 'folder') {
+          // Folder node - grey octahedron
+          const geometry = new THREE.OctahedronGeometry(5);
+          const material = new THREE.MeshBasicMaterial({
+            color: '#666666',
+            transparent: true,
+            opacity: 0.7
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          group.add(mesh);
+
+          // Add label
+          const label = new SpriteText(node.name || 'folder', 3, '#888888');
+          label.position.y = 8;
+          label.material.depthTest = false;
+          group.add(label);
+
+          return group;
+        } else if (node.type === 'terminal') {
+          // Terminal node - cube
+          const geometry = new THREE.BoxGeometry(6, 6, 6);
+          const material = new THREE.MeshBasicMaterial({
+            color: '#4ade80',
+            transparent: true,
+            opacity: 0.8
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+          group.add(mesh);
+
+          // Add label
+          const cmd = (node.command || 'terminal').substring(0, 20);
+          const label = new SpriteText(cmd, 3, '#4ade80');
+          label.position.y = 10;
+          label.material.depthTest = false;
+          group.add(label);
+
+          return group;
+        }
+      })
+      .linkColor(link => {
+        if (flashingLinks.has(link.id)) return '#ffffff';
+        if (pulsingLinks.has(link.id)) return '#f97316'; // Orange for waiting
+        return '#444444'; // Always grey
+      })
+      .linkOpacity(link => {
+        if (flashingLinks.has(link.id)) return 1;
+        if (pulsingLinks.has(link.id)) {
+          // Pulsing opacity between 0.5 and 1
+          const elapsed = (Date.now() - pulsingLinks.get(link.id).startTime) / 1000;
+          return 0.5 + Math.sin(elapsed * 4) * 0.5;
+        }
+        return 0.4;
+      })
+      .linkWidth(link => {
+        if (flashingLinks.has(link.id)) return 5;
+        if (pulsingLinks.has(link.id)) {
+          // Pulsing width between 2 and 4
+          const elapsed = (Date.now() - pulsingLinks.get(link.id).startTime) / 1000;
+          return 2 + Math.sin(elapsed * 4) * 2;
+        }
+        return 1;
+      })
+      .linkDirectionalParticles(link => {
+        if (flashingLinks.has(link.id)) return 30;
+        if (pulsingLinks.has(link.id)) return 15; // More particles when waiting
+        return 2;
+      })
+      .linkDirectionalParticleWidth(link => {
+        if (flashingLinks.has(link.id)) return 5;
+        if (pulsingLinks.has(link.id)) return 3;
+        return 1.5;
+      })
+      .linkDirectionalParticleSpeed(link => {
+        if (flashingLinks.has(link.id)) return 0.03;
+        if (pulsingLinks.has(link.id)) return 0.015; // Moderate speed for waiting
+        return 0.003;
+      })
+      .linkDirectionalParticleColor(link => {
+        if (flashingLinks.has(link.id)) return '#ffffff';
+        if (pulsingLinks.has(link.id)) return '#f97316'; // Orange particles
+        return '#555555';
+      })
+      .nodeLabel(node => '')
+      .onNodeHover(node => {
+        const tooltip = document.getElementById('tooltip');
+        if (node) {
+          tooltip.style.display = 'block';
+          if (node.type === 'session') {
+            const t = node.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+            let status = 'Idle';
+            if (node.waiting) status = `⏸️ Waiting: ${node.waitingTool || 'permission'}`;
+            else if (node.thinking) status = '🧠 Thinking...';
+            else if (node.active) status = '✅ Active';
+            const ctx = node.contextUsage || { current: 0, max: 200000, percent: 0 };
+            const ctxColor = ctx.percent > 80 ? '#ff6b6b' : ctx.percent > 50 ? '#fbbf24' : '#4ade80';
+            tooltip.querySelector('.label').textContent = `${node.machine || 'unknown'}`;
+            tooltip.querySelector('.detail').innerHTML = `
+              <div style="margin-bottom:4px;color:${node.waiting ? '#f97316' : '#888'}">${status}</div>
+              <div style="margin-bottom:4px;padding:4px;background:rgba(0,0,0,0.3);border-radius:4px;">
+                <span style="color:${ctxColor}">Context: ${ctx.percent}%</span> (${formatTokens(ctx.current)} / 200K)
+              </div>
+              <div>Input: ${formatTokens(t.input || 0)} | Output: ${formatTokens(t.output || 0)}</div>
+              <div>Cache Read: ${formatTokens(t.cacheRead || 0)} | Created: ${formatTokens(t.cacheCreation || 0)}</div>
+            `;
+          } else if (node.type === 'file') {
+            tooltip.querySelector('.label').textContent = node.name;
+            tooltip.querySelector('.detail').textContent = `Last: ${node.lastAction || 'Read'}`;
+          } else if (node.type === 'terminal') {
+            tooltip.querySelector('.label').textContent = 'Terminal';
+            tooltip.querySelector('.detail').textContent = node.command || '';
+          } else if (node.type === 'folder') {
+            tooltip.querySelector('.label').textContent = node.name;
+            tooltip.querySelector('.detail').textContent = 'Folder';
+          }
+        } else {
+          tooltip.style.display = 'none';
+        }
+      })
+      .onNodeClick(node => {
+        // Focus on node
+        const distance = 100;
+        const distRatio = 1 + distance / Math.hypot(node.x, node.y, node.z);
+        Graph.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node,
+          1000
+        );
+      });
+
+    // Mouse tracking for tooltip
+    document.addEventListener('mousemove', (e) => {
+      const tooltip = document.getElementById('tooltip');
+      tooltip.style.left = (e.clientX + 15) + 'px';
+      tooltip.style.top = (e.clientY + 15) + 'px';
+    });
+
+    // Add stars background
+    const starsGeometry = new THREE.BufferGeometry();
+    const starPositions = [];
+    for (let i = 0; i < 5000; i++) {
+      starPositions.push(
+        (Math.random() - 0.5) * 2500,
+        (Math.random() - 0.5) * 2500,
+        (Math.random() - 0.5) * 2500
+      );
+    }
+    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+    const starsMaterial = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 1.0,
+      transparent: true,
+      opacity: 0.6
+    });
+    const stars = new THREE.Points(starsGeometry, starsMaterial);
+    Graph.scene().add(stars);
+
+    // Add ambient floating dust particles (closer, larger)
+    const dustGeometry = new THREE.BufferGeometry();
+    const dustPositions = [];
+    const dustVelocities = [];
+    for (let i = 0; i < 200; i++) {
+      dustPositions.push(
+        (Math.random() - 0.5) * 400,
+        (Math.random() - 0.5) * 400,
+        (Math.random() - 0.5) * 400
+      );
+      dustVelocities.push(
+        (Math.random() - 0.5) * 0.05,
+        (Math.random() - 0.5) * 0.05,
+        (Math.random() - 0.5) * 0.05
+      );
+    }
+    dustGeometry.setAttribute('position', new THREE.Float32BufferAttribute(dustPositions, 3));
+    const dustMaterial = new THREE.PointsMaterial({
+      color: 0x6666ff,
+      size: 2,
+      transparent: true,
+      opacity: 0.3
+    });
+    const dust = new THREE.Points(dustGeometry, dustMaterial);
+    Graph.scene().add(dust);
+
+
+    // Persistent node/link storage to preserve positions
+    const nodeMap = new Map();
+    const linkMap = new Map();
+    let flashingLinks = new Set();
+    let pulsingLinks = new Map(); // linkId -> { color, startTime } for continuous pulsing
+
+    // Flash a link temporarily with burst effect
+    function flashLink(linkId) {
+      flashingLinks.add(linkId);
+      // Burst animation - multiple pulses
+      let pulseCount = 0;
+      const pulseInterval = setInterval(() => {
+        Graph.linkColor(Graph.linkColor()); // Force re-render
+        pulseCount++;
+        if (pulseCount > 3) {
+          clearInterval(pulseInterval);
+        }
+      }, 100);
+      // Remove flash after animation
+      setTimeout(() => {
+        flashingLinks.delete(linkId);
+        Graph.linkColor(Graph.linkColor()); // Force re-render
+      }, 800);
+    }
+
+    // Update graph incrementally (preserves positions)
+    function updateGraph(flashLinkId = null) {
+      // Update/add session nodes
+      state.sessions.forEach((session, id) => {
+        const nodeId = `session-${id}`;
+        let node = nodeMap.get(nodeId);
+        if (!node) {
+          node = { id: nodeId, type: 'session' };
+          nodeMap.set(nodeId, node);
+        }
+        node.machine = session.machine;
+        node.color = session.color;
+        node.active = session.active;
+        node.thinking = session.thinking;
+        node.waiting = session.waiting;
+        node.waitingTool = session.waitingTool;
+        node.tokens = session.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+        node.contextUsage = session.contextUsage;
+
+        // Update the brain's token | context label if it exists
+        const brainRef = brainNodes.get(nodeId);
+        if (brainRef && brainRef.tokenLabel) {
+          const t = node.tokens;
+          const tokenText = formatTokens((t.input || 0) + (t.output || 0));
+          const contextPct = node.contextUsage?.percent || 0;
+          brainRef.tokenLabel.text = `${tokenText} tok | ${contextPct}% ctx`;
+          brainRef.tokenLabel.color = node.color || brainRef.color || '#ff69b4';
+        }
+      });
+
+      // Update/add folder nodes
+      state.folders.forEach((folder, path) => {
+        const nodeId = `folder-${path}`;
+        let node = nodeMap.get(nodeId);
+        if (!node) {
+          node = { id: nodeId, type: 'folder' };
+          nodeMap.set(nodeId, node);
+        }
+        node.name = folder.name;
+        node.depth = folder.depth;
+
+        // Create links from session to first-level folders (depth 0)
+        if (folder.depth === 0) {
+          folder.sessions.forEach(sessionId => {
+            const linkId = `session-${sessionId}->folder-${path}`;
+            let link = linkMap.get(linkId);
+            if (!link) {
+              link = { id: linkId, source: `session-${sessionId}`, target: nodeId };
+              linkMap.set(linkId, link);
+            }
+            const session = state.sessions.get(sessionId);
+            link.active = session?.active;
+            link.color = '#666666';
+          });
+        }
+
+        // Create links from folder to children (subfolders)
+        folder.children?.forEach(childPath => {
+          const linkId = `folder-${path}->folder-${childPath}`;
+          let link = linkMap.get(linkId);
+          if (!link) {
+            link = { id: linkId, source: nodeId, target: `folder-${childPath}` };
+            linkMap.set(linkId, link);
+          }
+          link.color = '#666666';
+          link.active = true;
+        });
+      });
+
+      // Update/add file nodes
+      state.files.forEach((file, path) => {
+        const nodeId = `file-${path}`;
+        let node = nodeMap.get(nodeId);
+        if (!node) {
+          node = { id: nodeId, type: 'file' };
+          nodeMap.set(nodeId, node);
+        }
+        node.name = file.name;
+        node.actionColor = file.lastInteraction?.color || '#4a9eff';
+        node.lastAction = file.lastInteraction?.type;
+
+        // Create link from parent folder to file (or session if no folder)
+        if (file.parentFolder && state.folders.has(file.parentFolder)) {
+          const linkId = `folder-${file.parentFolder}->file-${path}`;
+          let link = linkMap.get(linkId);
+          if (!link) {
+            link = { id: linkId, source: `folder-${file.parentFolder}`, target: nodeId };
+            linkMap.set(linkId, link);
+          }
+          link.color = file.lastInteraction?.color || '#4a9eff';
+          link.active = true;
+        } else {
+          // No folder hierarchy, connect directly to session
+          file.sessions.forEach(sessionId => {
+            const linkId = `session-${sessionId}->file-${path}`;
+            let link = linkMap.get(linkId);
+            if (!link) {
+              link = { id: linkId, source: `session-${sessionId}`, target: nodeId };
+              linkMap.set(linkId, link);
+            }
+            const session = state.sessions.get(sessionId);
+            link.active = session?.active;
+            link.color = file.lastInteraction?.color || '#4a9eff';
+          });
+        }
+      });
+
+      // Update/add terminal nodes
+      state.terminals.forEach((terminal, id) => {
+        const nodeId = `terminal-${id}`;
+        let node = nodeMap.get(nodeId);
+        if (!node) {
+          node = { id: nodeId, type: 'terminal' };
+          nodeMap.set(nodeId, node);
+        }
+        node.command = terminal.command;
+
+        // Create link from session to terminal
+        const linkId = `session-${terminal.sessionId}->terminal-${id}`;
+        let link = linkMap.get(linkId);
+        if (!link) {
+          link = { id: linkId, source: `session-${terminal.sessionId}`, target: nodeId };
+          linkMap.set(linkId, link);
+        }
+        const session = state.sessions.get(terminal.sessionId);
+        link.active = session?.active;
+        link.color = '#4ade80';
+      });
+
+      // Remove stale nodes
+      for (const [id, node] of nodeMap) {
+        if (node.type === 'session' && !state.sessions.has(id.replace('session-', ''))) {
+          nodeMap.delete(id);
+        } else if (node.type === 'folder' && !state.folders.has(id.replace('folder-', ''))) {
+          nodeMap.delete(id);
+        } else if (node.type === 'file' && !state.files.has(id.replace('file-', ''))) {
+          nodeMap.delete(id);
+        } else if (node.type === 'terminal' && !state.terminals.has(id.replace('terminal-', ''))) {
+          nodeMap.delete(id);
+        }
+      }
+
+      // Flash the link if requested
+      if (flashLinkId) flashLink(flashLinkId);
+
+      // Update graph data
+      const nodes = Array.from(nodeMap.values());
+      const links = Array.from(linkMap.values());
+
+      // Force graph to re-evaluate colors by updating graphData
+      const currentData = Graph.graphData();
+      if (currentData.nodes.length === nodes.length && currentData.links.length === links.length) {
+        // Same structure, just update properties and refresh
+        Graph.nodeColor(Graph.nodeColor());
+        Graph.linkColor(Graph.linkColor());
+      } else {
+        Graph.graphData({ nodes, links });
+      }
+
+      // Update stats
+      document.getElementById('brain-count').textContent = state.sessions.size;
+      document.getElementById('file-count').textContent = state.files.size;
+      document.getElementById('terminal-count').textContent = state.terminals.size;
+
+      // Update machines list
+      const machinesDiv = document.getElementById('machines');
+      machinesDiv.innerHTML = '';
+      state.machines.forEach((machine, name) => {
+        const badge = document.createElement('div');
+        badge.className = 'machine-badge';
+        badge.innerHTML = `<div class="machine-dot" style="background: ${machine.color}; box-shadow: 0 0 10px ${machine.color};"></div>${name}`;
+        machinesDiv.appendChild(badge);
+      });
+    }
+
+    // WebSocket connection
+    let ws;
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+      ws.onopen = () => {
+        document.getElementById('connection-status').textContent = 'Connected';
+        document.getElementById('connection-status').className = 'connected';
+      };
+
+      ws.onclose = () => {
+        document.getElementById('connection-status').textContent = 'Disconnected';
+        document.getElementById('connection-status').className = 'disconnected';
+        setTimeout(connect, 2000);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleMessage(data);
+      };
+    }
+
+    function handleMessage(data) {
+      switch (data.type) {
+        case 'init':
+          // Initialize state from server
+          state.sessions.clear();
+          state.files.clear();
+          state.terminals.clear();
+          state.machines.clear();
+
+          // Initialize global tokens
+          if (data.globalTokens) {
+            globalTokens = data.globalTokens;
+            updateTokenDisplay();
+          }
+
+          data.machines?.forEach(m => {
+            state.machines.set(m.name, { color: m.color });
+          });
+
+          data.sessions?.forEach(s => {
+            state.sessions.set(s.id, {
+              files: new Set(s.files || []),
+              terminals: new Set(s.terminals || []),
+              active: s.active,
+              thinking: s.thinking,
+              waiting: s.waiting,
+              waitingTool: s.waitingTool,
+              machine: s.machine,
+              color: s.color,
+              tokens: s.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
+            });
+          });
+
+          data.files?.forEach(f => {
+            state.files.set(f.path, {
+              name: f.name,
+              sessions: new Set(f.sessions || []),
+              lastInteraction: f.lastInteraction
+            });
+          });
+
+          data.terminals?.forEach(t => {
+            state.terminals.set(t.id, {
+              sessionId: t.sessionId,
+              command: t.command
+            });
+          });
+
+          updateGraph();
+          break;
+
+        case 'session_add':
+          state.sessions.set(data.sessionId, {
+            files: new Set(),
+            terminals: new Set(),
+            active: true,
+            thinking: false,
+            machine: data.machine,
+            color: data.color
+          });
+          updateGraph();
+          break;
+
+        case 'session_update':
+          const session = state.sessions.get(data.sessionId);
+          if (session) {
+            if (data.active !== undefined) session.active = data.active;
+            if (data.thinking !== undefined) session.thinking = data.thinking;
+            if (data.machine) {
+              session.machine = data.machine;
+              // Update hostname label in 3D scene
+              const brainRef = brainNodes.get(`session-${data.sessionId}`);
+              if (brainRef && brainRef.label) {
+                brainRef.label.text = data.machine;
+                brainRef.label.color = data.color || brainRef.color;
+              }
+            }
+            if (data.color) {
+              session.color = data.color;
+              // Update label color
+              const brainRef = brainNodes.get(`session-${data.sessionId}`);
+              if (brainRef && brainRef.label) {
+                brainRef.label.color = data.color;
+              }
+            }
+            updateGraph();
+          }
+          break;
+
+        case 'session_remove':
+          // Clean up brainNodes reference
+          brainNodes.delete(`session-${data.sessionId}`);
+
+          // Clean up links from this session
+          for (const [linkId, link] of linkMap) {
+            if (linkId.startsWith(`session-${data.sessionId}->`)) {
+              linkMap.delete(linkId);
+            }
+          }
+
+          // Remove from nodeMap
+          nodeMap.delete(`session-${data.sessionId}`);
+
+          state.sessions.delete(data.sessionId);
+          updateGraph();
+          break;
+
+        case 'folder_remove':
+          // Clean up folder links
+          for (const [linkId, link] of linkMap) {
+            if (linkId.includes(`folder-${data.folderPath}`)) {
+              linkMap.delete(linkId);
+            }
+          }
+          nodeMap.delete(`folder-${data.folderPath}`);
+          state.folders.delete(data.folderPath);
+          updateGraph();
+          break;
+
+        case 'file_interaction':
+        case 'file_add':
+        case 'file_update':
+          // Process folders from the hierarchy
+          const linksToFlash = [];
+          let prevFolderPath = null;
+
+          if (data.folders && data.folders.length > 0) {
+            data.folders.forEach((folder, idx) => {
+              if (!state.folders.has(folder.path)) {
+                state.folders.set(folder.path, {
+                  name: folder.name,
+                  depth: folder.depth,
+                  sessions: new Set(),
+                  children: new Set()
+                });
+              }
+              const folderState = state.folders.get(folder.path);
+              folderState.sessions.add(data.sessionId);
+
+              // Link to previous folder or session
+              if (idx === 0) {
+                linksToFlash.push(`session-${data.sessionId}->folder-${folder.path}`);
+              } else if (prevFolderPath) {
+                state.folders.get(prevFolderPath).children.add(folder.path);
+                linksToFlash.push(`folder-${prevFolderPath}->folder-${folder.path}`);
+              }
+              prevFolderPath = folder.path;
+            });
+          }
+
+          // Process file
+          let file = state.files.get(data.filePath);
+          if (!file) {
+            file = { name: data.fileName, sessions: new Set(), lastInteraction: null, parentFolder: data.parentFolder };
+            state.files.set(data.filePath, file);
+          }
+          if (data.sessionId) file.sessions.add(data.sessionId);
+          if (data.color) file.lastInteraction = { color: data.color, type: data.interaction };
+          file.parentFolder = data.parentFolder;
+
+          // Update session's file list
+          const fileSession = state.sessions.get(data.sessionId);
+          if (fileSession) fileSession.files.add(data.filePath);
+
+          // Add file link to flash
+          if (data.parentFolder) {
+            linksToFlash.push(`folder-${data.parentFolder}->file-${data.filePath}`);
+          } else {
+            linksToFlash.push(`session-${data.sessionId}->file-${data.filePath}`);
+          }
+
+          // Flash all links in the path
+          linksToFlash.forEach(linkId => flashLink(linkId));
+          updateGraph();
+          break;
+
+        case 'file_remove':
+          // Clean up file links
+          for (const [linkId, link] of linkMap) {
+            if (linkId.includes(`file-${data.filePath}`)) {
+              linkMap.delete(linkId);
+            }
+          }
+          nodeMap.delete(`file-${data.filePath}`);
+          state.files.delete(data.filePath);
+          updateGraph();
+          break;
+
+        case 'session_thinking':
+          const thinkSession = state.sessions.get(data.sessionId);
+          if (thinkSession) {
+            thinkSession.thinking = data.thinking;
+            thinkSession.active = true;
+            updateGraph();
+          }
+          break;
+
+        case 'session_active':
+          const activeSession = state.sessions.get(data.sessionId);
+          if (activeSession) {
+            activeSession.active = data.active;
+            if (!data.active) activeSession.thinking = false;
+            updateGraph();
+          }
+          break;
+
+        case 'session_waiting':
+          const waitSession = state.sessions.get(data.sessionId);
+          if (waitSession) {
+            waitSession.waiting = data.waiting;
+            waitSession.waitingTool = data.toolName;
+            // Update node data
+            const waitNode = nodeMap.get(`session-${data.sessionId}`);
+            if (waitNode) {
+              waitNode.waiting = data.waiting;
+              waitNode.waitingTool = data.toolName;
+            }
+
+            // Handle terminal link pulsing when waiting for Bash
+            if (data.toolName === 'Bash') {
+              // Find terminal for this session
+              state.terminals.forEach((terminal, termId) => {
+                if (terminal.sessionId === data.sessionId) {
+                  const termLinkId = `session-${data.sessionId}->terminal-${termId}`;
+                  if (data.waiting) {
+                    // Start pulsing the terminal link
+                    pulsingLinks.set(termLinkId, { color: '#f97316', startTime: Date.now() });
+                  } else {
+                    // Stop pulsing
+                    pulsingLinks.delete(termLinkId);
+                  }
+                }
+              });
+            }
+            updateGraph();
+          }
+          break;
+
+        case 'terminal_interaction':
+        case 'terminal_update':
+          state.terminals.set(data.terminalId, {
+            sessionId: data.sessionId,
+            command: data.command
+          });
+          const termSession = state.sessions.get(data.sessionId);
+          if (termSession) termSession.terminals.add(data.terminalId);
+          // Flash the terminal link with animation
+          updateGraph(`session-${data.sessionId}->terminal-${data.terminalId}`);
+          break;
+
+        case 'terminal_remove':
+          // Clean up terminal links
+          for (const [linkId, link] of linkMap) {
+            if (linkId.includes(`terminal-${data.terminalId}`)) {
+              linkMap.delete(linkId);
+            }
+          }
+          nodeMap.delete(`terminal-${data.terminalId}`);
+          state.terminals.delete(data.terminalId);
+          updateGraph();
+          break;
+
+        case 'machine_add':
+          state.machines.set(data.machineName, { color: data.color });
+          updateGraph();
+          break;
+
+        case 'token_update':
+          // Update global tokens
+          if (data.globalTokens) {
+            globalTokens = data.globalTokens;
+          }
+
+          // Update session tokens and context usage
+          const tokenSession = state.sessions.get(data.sessionId);
+          if (tokenSession) {
+            if (data.tokens) tokenSession.tokens = data.tokens;
+            if (data.contextUsage) tokenSession.contextUsage = data.contextUsage;
+          }
+
+          // Update the brain node's token | context label
+          const brainRef = brainNodes.get(`session-${data.sessionId}`);
+          if (brainRef && brainRef.tokenLabel) {
+            const t = data.tokens || { input: 0, output: 0 };
+            const tokenText = formatTokens((t.input || 0) + (t.output || 0));
+            const contextPct = data.contextUsage?.percent || 0;
+            brainRef.tokenLabel.text = `${tokenText} tok | ${contextPct}% ctx`;
+            brainRef.tokenLabel.color = brainRef.color || '#ff69b4';
+          }
+
+          // Also update the node data for re-renders
+          const nodeData = nodeMap.get(`session-${data.sessionId}`);
+          if (nodeData) {
+            if (data.tokens) nodeData.tokens = data.tokens;
+            if (data.contextUsage) nodeData.contextUsage = data.contextUsage;
+          }
+
+          // Update display with pulse animation
+          updateTokenDisplay();
+          const tokenStat = document.querySelector('.token-stat');
+          tokenStat.classList.remove('pulse');
+          void tokenStat.offsetWidth; // Trigger reflow
+          tokenStat.classList.add('pulse');
+
+
+          // Create token burst from the session brain
+          const brainNode = nodeMap.get(`session-${data.sessionId}`);
+          if (brainNode && brainNode.__threeObj) {
+            const pos = brainNode.__threeObj.position;
+            // Yellow burst for output tokens
+            if (data.delta?.output > 0) {
+              createTokenBurst(pos, 0xffd700, Math.min(data.delta.output / 10, 50));
+            }
+            // Blue burst for input tokens
+            if (data.delta?.input > 0) {
+              createTokenBurst(pos, 0x4a9eff, Math.min(data.delta.input / 50, 30));
+            }
+            // Green burst for cache hits
+            if (data.delta?.cacheRead > 0) {
+              createTokenBurst(pos, 0x4ade80, Math.min(data.delta.cacheRead / 100, 40));
+            }
+          }
+          break;
+      }
+    }
+
+    // Start connection
+    connect();
+
+    // Animation loop for brain pulsing
+    let animTime = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      animTime += 0.05;
+
+      brainNodes.forEach((brain, id) => {
+        const node = nodeMap.get(id);
+        if (!node) return;
+
+        // Update active/thinking/waiting state from node
+        brain.active = node.active;
+        brain.thinking = node.thinking;
+        brain.waiting = node.waiting;
+
+        if (brain.waiting) {
+          // Waiting for permission - orange pulsing, slow rotation
+          brain.waitMaterial.opacity = 0.3 + Math.sin(animTime * 2) * 0.2;
+          brain.waitGlow.scale.setScalar(1 + Math.sin(animTime * 1.5) * 0.1);
+          brain.waitRingMaterial.opacity = 0.5 + Math.sin(animTime * 3) * 0.3;
+          brain.waitRing.rotation.z = animTime * 0.8;
+          brain.waitRing.scale.setScalar(1 + Math.sin(animTime * 2) * 0.15);
+
+          // Dim other effects while waiting
+          brain.ringMaterial.opacity = 0.1;
+          brain.thinkMaterial.opacity = 0;
+          brain.glowMaterial.opacity = 0.15;
+
+          // Subtle sphere pulse
+          brain.sphere.scale.setScalar(1 + Math.sin(animTime * 2) * 0.05);
+        } else if (brain.active) {
+          // Hide waiting effects
+          brain.waitMaterial.opacity = 0;
+          brain.waitRingMaterial.opacity = 0;
+
+          // Pulse the ring
+          const pulse = Math.sin(animTime * 3) * 0.3 + 0.5;
+          brain.ringMaterial.opacity = pulse;
+          brain.ring.scale.setScalar(1 + Math.sin(animTime * 2) * 0.1);
+          brain.ring.rotation.z = animTime * 0.5;
+
+          // Pulse the glow
+          brain.glowMaterial.opacity = 0.2 + Math.sin(animTime * 4) * 0.15;
+          brain.glow.scale.setScalar(1 + Math.sin(animTime * 3) * 0.05);
+
+          if (brain.thinking) {
+            // Intense thinking animation
+            brain.thinkMaterial.opacity = 0.2 + Math.sin(animTime * 6) * 0.2;
+            brain.thinkGlow.scale.setScalar(1 + Math.sin(animTime * 4) * 0.15);
+            brain.sphere.scale.setScalar(1 + Math.sin(animTime * 5) * 0.08);
+          } else {
+            brain.thinkMaterial.opacity = 0;
+            brain.sphere.scale.setScalar(1);
+          }
+        } else {
+          // Inactive - hide all effects
+          brain.ringMaterial.opacity = 0;
+          brain.glowMaterial.opacity = 0.1;
+          brain.thinkMaterial.opacity = 0;
+          brain.waitMaterial.opacity = 0;
+          brain.waitRingMaterial.opacity = 0;
+          brain.sphere.scale.setScalar(1);
+        }
+      });
+
+      // Slowly rotate stars with twinkling
+      if (stars) {
+        stars.rotation.y += 0.0003;
+        stars.rotation.x += 0.0001;
+        // Twinkle effect - vary opacity
+        starsMaterial.opacity = 0.5 + Math.sin(animTime * 0.5) * 0.15;
+      }
+
+      // Animate dust particles floating
+      if (dust) {
+        dust.rotation.y += 0.0005;
+        dust.rotation.x += 0.0002;
+        dustMaterial.opacity = 0.2 + Math.sin(animTime * 0.3) * 0.1;
+        // Move dust particles
+        const positions = dustGeometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+          positions[i] += Math.sin(animTime + i) * 0.02;
+          positions[i + 1] += Math.cos(animTime + i) * 0.02;
+          positions[i + 2] += Math.sin(animTime * 0.5 + i) * 0.01;
+        }
+        dustGeometry.attributes.position.needsUpdate = true;
+      }
+
+      // Gentle folder rotation only (no twitchy floating)
+      Graph.graphData().nodes.forEach(node => {
+        if (node.__threeObj && node.type === 'folder') {
+          node.__threeObj.rotation.y = animTime * 0.3;
+        }
+      });
+
+      // Update pulsing links (force re-render for smooth animation)
+      if (pulsingLinks.size > 0) {
+        Graph.linkColor(Graph.linkColor());
+        Graph.linkOpacity(Graph.linkOpacity());
+        Graph.linkWidth(Graph.linkWidth());
+      }
+
+      // Animate token burst particles
+      for (let i = tokenBursts.length - 1; i >= 0; i--) {
+        const burst = tokenBursts[i];
+        burst.mesh.position.add(burst.velocity);
+        burst.velocity.multiplyScalar(0.98); // Slow down
+        burst.life -= burst.decay;
+        burst.mesh.material.opacity = burst.life;
+        burst.mesh.scale.setScalar(burst.life * 2);
+
+        if (burst.life <= 0) {
+          Graph.scene().remove(burst.mesh);
+          burst.mesh.geometry.dispose();
+          burst.mesh.material.dispose();
+          tokenBursts.splice(i, 1);
+        }
+      }
+    }
+    animate();
+
+    // Auto camera drift for ambient feel
+    let cameraAngle = 0;
+    function cameraDrift() {
+      requestAnimationFrame(cameraDrift);
+      cameraAngle += 0.001;
+      const radius = 300;
+      const x = Math.sin(cameraAngle) * radius;
+      const z = Math.cos(cameraAngle) * radius;
+      // Only drift if user hasn't interacted recently
+      if (!Graph.controls().enabled || Date.now() - lastInteraction > 10000) {
+        Graph.cameraPosition({ x, y: 100, z }, { x: 0, y: 0, z: 0 });
+      }
+    }
+    let lastInteraction = Date.now();
+    document.addEventListener('mousedown', () => lastInteraction = Date.now());
+    document.addEventListener('wheel', () => lastInteraction = Date.now());
+    // cameraDrift(); // Uncomment to enable auto-rotate
+
+      </script>
+</body>
+</html>

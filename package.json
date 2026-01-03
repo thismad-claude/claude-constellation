@@ -1,0 +1,26 @@
+{
+  "name": "claude-constellation",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js"
+  },
+  "keywords": [
+    "claude",
+    "visualization"
+  ],
+  "author": "thisma",
+  "license": "ISC",
+  "description": "Real-time Claude Code activity visualization",
+  "dependencies": {
+    "3d-force-graph": "^1.79.0",
+    "chokidar": "^5.0.0",
+    "express": "^5.2.1",
+    "three": "^0.182.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.57.0"
+  }
+}
