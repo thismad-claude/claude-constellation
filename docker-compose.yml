@@ -4,7 +4,8 @@ services:
     container_name: claude-constellation
     network_mode: host
     volumes:
-      - ~/.claude:/.claude:ro
+      # Modify this path to your .claude directory
+      - ${HOME}/.claude:/root/.claude:ro
     environment:
-      - HOME=/app
+      - HOME=/root
     restart: unless-stopped
