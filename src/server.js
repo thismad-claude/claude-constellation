@@ -174,7 +174,7 @@ function processEvent(event) {
       lastActivity: Date.now(),
       machine: machineName,
       color: machine.color,
-      cwd: event.cwd || BASE_PATH,
+      cwd: event.cwd || null,  // Set only from first event with cwd
       tokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
       lastSeenTokens: { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
       contextUsage: { current: 0, max: 200000, percent: 0 },
@@ -240,8 +240,8 @@ function processEvent(event) {
 
   const session = state.sessions.get(sessionId);
 
-  // Update cwd if provided (always update, hook sends the real cwd)
-  if (event.cwd) {
+  // Set cwd only once (initial launch directory, never changes)
+  if (event.cwd && !session.cwd) {
     session.cwd = event.cwd;
   }
 
