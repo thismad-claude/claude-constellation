@@ -577,6 +577,7 @@
             tooltip.querySelector('.label').textContent = `${node.machine || 'unknown'}`;
             tooltip.querySelector('.detail').innerHTML = `
               <div style="margin-bottom:4px;color:${node.waiting ? '#f97316' : '#888'}">${status}</div>
+              ${node.cwd ? `<div style="margin-bottom:4px;color:#60a5fa;font-size:11px;">📁 ${node.cwd}</div>` : ''}
               <div style="margin-bottom:4px;padding:4px;background:rgba(0,0,0,0.3);border-radius:4px;">
                 <span style="color:${ctxColor}">Context: ${ctx.percent}%</span> (${formatTokens(ctx.current)} / 200K)
               </div>
