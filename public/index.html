@@ -706,6 +706,7 @@
         node.waitingTool = session.waitingTool;
         node.tokens = session.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
         node.contextUsage = session.contextUsage;
+        node.cwd = session.cwd;
 
         // Update the brain's token | context label if it exists
         const brainRef = brainNodes.get(nodeId);
