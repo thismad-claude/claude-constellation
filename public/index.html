@@ -916,7 +916,9 @@
               waitingTool: s.waitingTool,
               machine: s.machine,
               color: s.color,
-              tokens: s.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
+              tokens: s.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 },
+              contextUsage: s.contextUsage,
+              cwd: s.cwd
             });
           });
 
@@ -945,7 +947,10 @@
             active: true,
             thinking: false,
             machine: data.machine,
-            color: data.color
+            color: data.color,
+            cwd: data.cwd,
+            contextUsage: data.contextUsage,
+            tokens: data.tokens || { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }
           });
           updateGraph();
           break;
