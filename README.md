@@ -25,10 +25,11 @@ git clone https://github.com/thismad-claude/claude-constellation.git
 cd claude-constellation
 
 # Build et lancement avec Docker
-docker compose up -d --build
+# Note: -E préserve $HOME pour le mount du dossier .claude
+sudo -E docker compose up -d --build
 
 # Vérifier les logs
-docker logs claude-constellation
+sudo docker logs claude-constellation
 ```
 
 Le serveur tourne sur le port 3333.
