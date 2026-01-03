@@ -545,8 +545,22 @@ setInterval(() => {
         machine.sessions.delete(sessionId);
       }
 
+      // Subtract session tokens from global tokens
+      if (session.tokens) {
+        globalTokens.totalInput -= session.tokens.input || 0;
+        globalTokens.totalOutput -= session.tokens.output || 0;
+        globalTokens.totalCacheRead -= session.tokens.cacheRead || 0;
+        globalTokens.totalCacheCreation -= session.tokens.cacheCreation || 0;
+
+        // Ensure no negative values
+        globalTokens.totalInput = Math.max(0, globalTokens.totalInput);
+        globalTokens.totalOutput = Math.max(0, globalTokens.totalOutput);
+        globalTokens.totalCacheRead = Math.max(0, globalTokens.totalCacheRead);
+        globalTokens.totalCacheCreation = Math.max(0, globalTokens.totalCacheCreation);
+      }
+
       state.sessions.delete(sessionId);
-      broadcast({ type: 'session_remove', sessionId });
+      broadcast({ type: 'session_remove', sessionId, globalTokens });
     }
   });
 }, 5000);
